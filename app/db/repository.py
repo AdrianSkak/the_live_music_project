@@ -152,3 +152,113 @@ def process_raw_events(conn, scrape_run_id: int) -> int:
 
     conn.commit()
     return inserted_or_updated
+
+
+def get_pending_alerts(conn) -> list[dict]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT
+                a.id AS alert_id,
+                a.match_type,
+                a.status,
+                e.id AS event_id,
+                e.source,
+                e.source_event_id,
+                e.artist_name,
+                e.venue_name,
+                e.city,
+                e.country_code,
+                e.event_date,
+                e.event_url,
+                ta.artist_name AS tracked_artist_name,
+                a.created_at AS alert_created_at
+            FROM alerts a
+            JOIN events e
+                ON e.id = a.event_id
+            JOIN tracked_artists ta
+                ON ta.id = a.tracked_artist_id
+            WHERE a.status = 'new'
+            ORDER BY e.event_date ASC, a.id ASC
+            """
+        )
+        return list(cur.fetchall())
+
+
+def get_source_status(conn) -> list[dict]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT
+                id,
+                artist_name,
+                source_type,
+                parser_key,
+                source_url,
+                is_active,
+                created_at
+            FROM sources
+            ORDER BY id ASC
+            """
+        )
+        return list(cur.fetchall())
+
+
+def get_recent_scrape_runs(conn, limit: int = 5) -> list[dict]:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT
+                id,
+                status,
+                total_sources,
+                succeeded_sources,
+                failed_sources,
+                started_at,
+                finished_at
+            FROM scrape_runs
+            ORDER BY id DESC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        return list(cur.fetchall())
+
+
+def get_pipeline_counts(conn) -> dict:
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT
+                (SELECT count(*) FROM sources) AS sources,
+                (SELECT count(*) FROM sources WHERE is_active = TRUE) AS active_sources,
+                (SELECT count(*) FROM raw_events) AS raw_events,
+                (SELECT count(*) FROM events) AS events,
+                (SELECT count(*) FROM alerts) AS alerts,
+                (SELECT count(*) FROM alerts WHERE status = 'new') AS new_alerts,
+                (SELECT count(*) FROM scrape_errors) AS scrape_errors
+            """
+        )
+        return dict(cur.fetchone())
+
+
+def mark_alerts_sent(conn, alert_ids: list[int]) -> int:
+    if not alert_ids:
+        return 0
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE alerts
+            SET status = 'sent',
+                sent_at = NOW(),
+                error_message = NULL
+            WHERE id = ANY(%s)
+              AND status = 'new'
+            """,
+            (alert_ids,),
+        )
+        affected = cur.rowcount
+
+    conn.commit()
+    return affected
