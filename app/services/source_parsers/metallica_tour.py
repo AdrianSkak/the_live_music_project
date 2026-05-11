@@ -91,7 +91,7 @@ class MetallicaTourParser(BaseParser):
                 break
 
             text = current.get_text(" ", strip=True)
-            if DATE_RE.search(text) and (
+            if self._contains_event_date(current) and (
                 "More Info" in text or "BUY TICKETS" in text or "Tickets Sold Out" in text
             ):
                 best = current
@@ -99,6 +99,9 @@ class MetallicaTourParser(BaseParser):
             current = current.parent
 
         return best
+
+    def _contains_event_date(self, element) -> bool:
+        return any(DATE_RE.match(token.strip()) for token in element.stripped_strings)
 
     def _extract_tokens(self, container) -> list[str]:
         tokens = []
