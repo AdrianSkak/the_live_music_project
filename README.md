@@ -1,126 +1,108 @@
 # The Live Music Project
 
-MVP aplikacji do wykrywania koncertow obserwowanych artystow w wybranych
-lokalizacjach.
+The Live Music Project is a small MVP for tracking upcoming concerts by artists
+you care about.
 
-Projekt jest obecnie w fazie database-first:
+The goal is simple: help users find out when followed bands announce concerts
+near selected locations, before tickets are sold out or the event has already
+passed.
 
-- PostgreSQL przechowuje zrodla, raw eventy, przetworzone wydarzenia i alerty.
-- Python pobiera HTML, wybiera parser po `parser_key` i zapisuje raw eventy.
-- Logika przetwarzania raw eventow i generowania alertow mieszka w SQL.
+## What It Does
 
-## Wymagania
+The current version focuses on the core data pipeline:
 
+- stores followed artists, locations, events, and alerts,
+- collects concert data from selected web sources,
+- parses artist tour pages,
+- saves normalized events,
+- matches events against tracked locations,
+- lists pending concert alerts.
+
+This is not a full product yet. There is no user interface, account system, or
+production notification channel. The project is intentionally kept small while
+the MVP pipeline is being validated.
+
+## Current Scope
+
+The current implementation supports a small set of real artist sources and a
+local PostgreSQL database.
+
+The next natural steps are:
+
+- add more reliable artist sources,
+- improve event deduplication,
+- improve location matching,
+- improve email and WhatsApp notifications,
+- add a lightweight API or UI later.
+
+## Tech Stack
+
+- Python
+- PostgreSQL
 - Docker Compose
-- Python 3.11+
 
-Zainstaluj zaleznosci:
+## Getting Started
 
-```powershell
-python -m pip install -r requirements.txt
-```
-
-## Baza danych
-
-Uruchom PostgreSQL:
+Start the local database:
 
 ```powershell
 docker compose up -d
 ```
 
-Domyslny connection string:
+Install Python dependencies:
 
-```text
-postgresql://postgres:postgres@localhost:5432/live_music
+```powershell
+python -m pip install -r requirements.txt
 ```
 
-Mozesz go nadpisac przez `DATABASE_URL`.
-
-W PowerShellu:
+Set the database URL if needed:
 
 ```powershell
 $env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/live_music"
 ```
 
-## Schemat i dane testowe
+Database schema and seed files are kept in `sql/schema` and `sql/seed`.
 
-Pliki SQL sa w katalogach:
+## Useful Commands
 
-- `sql/schema` - schemat, funkcje i migracje
-- `sql/seed` - dane startowe
-- `sql/queries` - zapytania pomocnicze
-
-Uruchamiaj schematy w kolejnosci numerycznej, a potem seedy:
-
-```powershell
-psql $env:DATABASE_URL -f sql/schema/001_init.sql
-psql $env:DATABASE_URL -f sql/schema/002_alert_functions.sql
-psql $env:DATABASE_URL -f sql/schema/003_scraping.sql
-psql $env:DATABASE_URL -f sql/schema/004_raw_event_processing.sql
-psql $env:DATABASE_URL -f sql/schema/005_parser_keys.sql
-psql $env:DATABASE_URL -f sql/schema/006_deactivate_unsupported_sources.sql
-psql $env:DATABASE_URL -f sql/seed/001_test_data.sql
-psql $env:DATABASE_URL -f sql/seed/002_sources.sql
-```
-
-## Scrapery
-
-Glowne wejscie:
-
-```powershell
-python scripts/run_scrapers.py
-```
-
-Runner:
-
-1. pobiera aktywne zrodla z tabeli `sources`,
-2. wybiera parser przez `parser_key`,
-3. pobiera HTML,
-4. zapisuje rekordy do `raw_events`,
-5. odpala `process_raw_events(scrape_run_id)`.
-
-Obecnie aktywne parsery:
-
-- `metallica_tour`
-- `iron_maiden_tour_2026`
-
-Rammstein jest w seedzie jako nieaktywny, dopoki nie ma parsera
-`rammstein_live`.
-
-Sprawdz status pipeline'u bez modyfikowania bazy:
+Check the current pipeline status:
 
 ```powershell
 python scripts/check_pipeline_status.py
 ```
 
-## Alerty
-
-Wygeneruj alerty:
-
-```sql
-select generate_alerts();
-```
-
-Podejrzyj nowe alerty:
+Run the scrapers:
 
 ```powershell
-psql $env:DATABASE_URL -f sql/queries/001_pending_alerts.sql
+python scripts/run_scrapers.py
 ```
 
-Wypisz alerty w konsoli:
+Print pending alerts:
 
 ```powershell
 python scripts/notify_pending_alerts.py
 ```
 
-Wypisz alerty i oznacz je jako wyslane:
+Preview a pending alert email:
 
 ```powershell
-python scripts/notify_pending_alerts.py --mark-sent
+python scripts/send_pending_alert_emails.py
 ```
 
-## Testy
+Send pending alerts by email:
+
+```powershell
+python scripts/send_pending_alert_emails.py --send
+```
+
+Run tests:
 
 ```powershell
 python -m unittest discover -s test -p "test_*.py"
 ```
+
+## Project Status
+
+Early MVP. The repository is mainly focused on proving that the concert
+collection and alert pipeline can work end to end before adding larger product
+features.
